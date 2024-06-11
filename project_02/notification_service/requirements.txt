@@ -1,5 +1,2 @@
-Updating dependencies
-Resolving dependencies...
-
-Writing lock file
-
+pika==1.3.2 ; python_version >= "3.10" and python_version < "4.0"
+python-dotenv==1.0.1 ; python_version >= "3.10" and python_version < "4.0"
