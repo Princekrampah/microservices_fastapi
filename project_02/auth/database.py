@@ -1,6 +1,6 @@
-import sqlalchemy as _sql
-import sqlalchemy.ext.declarative as _declarative
-import sqlalchemy.orm as _orm
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import os
 
@@ -18,6 +18,6 @@ postgres_port = os.environ.get("POSTGRES_PORT")
 # Assuming your PostgreSQL server is running locally with a database named 'mydatabase'
 DATABASE_URL = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}"
 
-engine = _sql.create_engine(DATABASE_URL)
-SessionLocal = _orm.sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = _declarative.declarative_base()
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()

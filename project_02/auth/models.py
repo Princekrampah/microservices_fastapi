@@ -11,12 +11,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from passlib.hash import bcrypt
 from database import Base, engine
-import database as _database
+from database import Base
 
 Base.metadata.create_all(engine)
 
 
-class User(_database.Base):
+class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
@@ -31,7 +31,7 @@ class User(_database.Base):
         return bcrypt.verify(password, self.hashed_password)
 
 
-class Address(_database.Base):
+class Address(Base):
     __tablename__ = "addresses"
     id = Column(Integer, primary_key=True, index=True)
     street = Column(String)

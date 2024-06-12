@@ -87,6 +87,7 @@ async def generate_otp(user_data: GenerateOtp):
         if response.status_code == 200:
             return response.json()
         else:
+            print(response)
             raise HTTPException(
                 status_code=response.status_code, detail=response.json())
     except requests.exceptions.ConnectionError as e:

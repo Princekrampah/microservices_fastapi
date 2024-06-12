@@ -1,13 +1,12 @@
 import jwt
 from sqlalchemy.orm import Session
-import passlib.hash as _hash
-import email_validator as _email_check
-import fastapi as _fastapi
+from email_validator import validate_email, EmailNotValidError
+from fastapi import HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from passlib.hash import bcrypt
-import database as _database
-import schemas as _schemas
-import models as _models
+from database import Base, SessionLocal, engine
+import schemas
+import models
 import random
 import json
 import pika
@@ -22,12 +21,12 @@ oauth2schema = OAuth2PasswordBearer("/api/token")
 
 def create_database():
     # Create database tables
-    return _database.Base.metadata.create_all(bind=_database.engine)
+    return Base.metadata.create_all(bind=engine)
 
 
 def get_db():
     # Dependency to get a database session
-    db = _database.SessionLocal()
+    db = SessionLocal()
     try:
         yield db
     finally:
@@ -37,21 +36,21 @@ def get_db():
 async def get_user_by_email(email: str, db: Session):
     # Retrieve a user by email from the database
     # and _models.User.is_verified == True
-    return db.query(_models.User).filter(_models.User.email == email).first()
+    return db.query(models.User).filter(models.User.email == email).first()
 
 
-async def create_user(user: _schemas.UserCreate, db: Session):
+async def create_user(user: schemas.UserCreate, db: Session):
     # Create a new user in the database
     try:
-        valid = _email_check.validate_email(user.email)
+        valid = validate_email(user.email)
         name = user.name
         email = valid.email
-    except _email_check.EmailNotValidError:
-        raise _fastapi.HTTPException(
+    except EmailNotValidError:
+        raise HTTPException(
             status_code=404, detail="Please enter a valid email")
 
-    user_obj = _models.User(email=email, name=name,
-                            hashed_password=_hash.bcrypt.hash(user.password))
+    user_obj = models.User(email=email, name=name,
+                            hashed_password=bcrypt.hash(user.password))
     db.add(user_obj)
     db.commit()
     db.refresh(user_obj)
@@ -75,24 +74,24 @@ async def authenticate_user(email: str, password: str, db: Session):
     return user
 
 
-async def create_token(user: _models.User):
+async def create_token(user: models.User):
     # Create a JWT token for authentication
-    user_obj = _schemas.User.model_validate(user)
+    user_obj = schemas.User.model_validate(user)
     user_dict = user_obj.model_dump()
     del user_dict["date_created"]
     token = jwt.encode(user_dict, JWT_SECRET, algorithm="HS256")
     return dict(access_token=token, token_type="bearer")
 
 
-async def get_current_user(db: Session = _fastapi.Depends(get_db), token: str = _fastapi.Depends(oauth2schema)):
+async def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2schema)):
     # Get the current authenticated user from the JWT token
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        user = db.query(_models.User).get(payload["id"])
+        user = db.query(models.User).get(payload["id"])
     except:
-        raise _fastapi.HTTPException(
+        raise HTTPException(
             status_code=401, detail="Invalid Email or Password")
-    return _schemas.User.model_validate(user)
+    return schemas.User.model_validate(user)
 
 
 def generate_otp():

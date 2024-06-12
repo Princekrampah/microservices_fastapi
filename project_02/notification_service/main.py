@@ -33,7 +33,7 @@ def main():
         queue="email_notification", on_message_callback=callback
     )
 
-    print("Waiting for messages. To exit press CTRL+C")
+    print("Waiting for messages. To exit press CTRL+C...")
 
     channel.start_consuming()
 
