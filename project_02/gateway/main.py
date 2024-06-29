@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException,  File, UploadFile
-import fastapi as _fastapi
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import FastAPI, HTTPException, Depends, status, File, UploadFile
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from jwt.exceptions import DecodeError
 import requests
@@ -12,15 +12,12 @@ import jwt
 import rpc_client
 
 # Import Pydantic Schemas
-from schemas import (
-    UserCredentials,
-    UserRegisteration,
-    GenerateOtp,
-    VerifyOtp
-)
+from schemas import UserCredentials, UserRegisteration, GenerateOtp, VerifyOtp
 
 app = FastAPI()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# OAuth2PasswordBearer configuration
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 # Load environment variables
 load_dotenv()
@@ -32,25 +29,30 @@ AUTH_BASE_URL = os.environ.get("AUTH_BASE_URL")
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
 
 # Connect to RabbitMQ
-connection = pika.BlockingConnection(pika.ConnectionParameters(
-    RABBITMQ_URL))  # add container name in docker
+connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_URL))
 channel = connection.channel()
 channel.queue_declare(queue='gatewayservice')
 channel.queue_declare(queue='ocr_service')
 
-
 # JWT token validation
-async def jwt_validation(token: str = _fastapi.Depends(oauth2_scheme)):
+
+
+async def jwt_validation(token: str = Depends(oauth2_scheme)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is missing")
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return payload
-    except DecodeError as e:
+        return payload  # Return the decoded payload containing user details
+    except DecodeError:
         raise HTTPException(status_code=401, detail="Invalid JWT token")
-
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 # Authentication routes
+
+
 @app.post("/auth/login", tags=['Authentication Service'])
-async def login(user_data: UserCredentials):
+async def login(user_data: OAuth2PasswordRequestForm = Depends()):
     try:
         response = requests.post(f"{AUTH_BASE_URL}/api/token", json={
                                  "username": user_data.username, "password": user_data.password})
@@ -59,13 +61,13 @@ async def login(user_data: UserCredentials):
         else:
             raise HTTPException(
                 status_code=response.status_code, detail=response.json())
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         raise HTTPException(
             status_code=503, detail="Authentication service is unavailable")
 
 
 @app.post("/auth/register", tags=['Authentication Service'])
-async def registeration(user_data: UserRegisteration):
+async def register(user_data: UserRegisteration):
     try:
         response = requests.post(f"{AUTH_BASE_URL}/api/users", json={
                                  "name": user_data.name, "email": user_data.email, "password": user_data.password})
@@ -74,7 +76,7 @@ async def registeration(user_data: UserRegisteration):
         else:
             raise HTTPException(
                 status_code=response.status_code, detail=response.json())
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         raise HTTPException(
             status_code=503, detail="Authentication service is unavailable")
 
@@ -87,10 +89,9 @@ async def generate_otp(user_data: GenerateOtp):
         if response.status_code == 200:
             return response.json()
         else:
-            print(response)
             raise HTTPException(
                 status_code=response.status_code, detail=response.json())
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         raise HTTPException(
             status_code=503, detail="Authentication service is unavailable")
 
@@ -105,15 +106,18 @@ async def verify_otp(user_data: VerifyOtp):
         else:
             raise HTTPException(
                 status_code=response.status_code, detail=response.json())
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         raise HTTPException(
             status_code=503, detail="Authentication service is unavailable")
 
+# OCR route
 
-# ml microservice route - OCR route
-@app.post('/ocr',  tags=['Machine learning Service'])
-def ocr(file: UploadFile = File(...),
-        payload: dict = _fastapi.Depends(jwt_validation)):
+
+@app.post('/ocr', tags=['Machine learning Service'])
+async def ocr(
+    file: UploadFile = File(...),
+    # payload: dict = Depends(jwt_validation)
+):
 
     # Save the uploaded file to a temporary location
     with open(file.filename, "wb") as buffer:
@@ -126,9 +130,9 @@ def ocr(file: UploadFile = File(...),
         file_base64 = base64.b64encode(file_data).decode()
 
     request_json = {
-        'user_name': payload['name'],
-        'user_email': payload['email'],
-        'user_id': payload['id'],
+        'user_name': 'prince',
+        'user_email': 'jsksprince@gmail.com',
+        'user_id':'id',
         'file': file_base64
     }
 
@@ -138,7 +142,6 @@ def ocr(file: UploadFile = File(...),
     # Delete the temporary image file
     os.remove(file.filename)
     return response
-
 
 if __name__ == "__main__":
     import uvicorn

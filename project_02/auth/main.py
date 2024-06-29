@@ -31,8 +31,9 @@ models.Base.metadata.create_all(models.engine)
 
 @app.post("/api/users",  tags=['User Auth'])
 async def create_user(
-        user: schemas.UserCreate,
-        db: Session = Depends(services.get_db)):
+    user: schemas.UserCreate,
+    db: Session = Depends(services.get_db)
+):
     db_user = await services.get_user_by_email(email=user.email, db=db)
 
     if db_user:

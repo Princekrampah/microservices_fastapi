@@ -50,11 +50,11 @@ async def create_user(user: schemas.UserCreate, db: Session):
             status_code=404, detail="Please enter a valid email")
 
     user_obj = models.User(email=email, name=name,
-                            hashed_password=bcrypt.hash(user.password))
+                           hashed_password=bcrypt.hash(user.password))
     db.add(user_obj)
     db.commit()
     db.refresh(user_obj)
-    
+
     return user_obj
 
 
@@ -115,28 +115,46 @@ def send_otp(email, otp, channel):
     # Send an OTP email notification using RabbitMQ
     connection = connect_to_rabbitmq()
     channel = connection.channel()
-    message = {'email': email,
-               'subject': 'Account Verification OTP Notification',
-               'other': 'null',
-               'body': f'Your OTP for account verification is: {otp} \n Please enter this OTP on the verification page to complete your account setup. \n If you did not request this OTP, please ignore this message.\n Thank you '
-               }
+    message = {
+        'email': email,
+        'subject': 'Account Verification OTP Notification',
+        'other': 'null',
+        'body': f'Your OTP for account verification is: {otp} \n Please enter this OTP on the verification page to complete your account setup. \n If you did not request this OTP, please ignore this message.\n Thank you '
+    }
 
     try:
+        # Attempts to declare the email_notification queue passively
+        # (i.e., it checks if the queue exists without creating it).
+        # queue_declare_ok: Holds the response from the queue declaration.
         queue_declare_ok = channel.queue_declare(
-            queue='email_notification', passive=True)
+            queue='email_notification',
+            passive=True
+        )
+
+        # current_durable: Stores the current durability status of the queue.
         current_durable = queue_declare_ok.method.queue
 
+        # Checks if the queue is durable.
         if current_durable:
+            # If the current queue durability doesn't match,
             if queue_declare_ok.method.queue != current_durable:
+                # it deletes the existing queue
                 channel.queue_delete(queue='email_notification')
+                # and declares a new durable one.
                 channel.queue_declare(queue='email_notification', durable=True)
         else:
+            # Create a new queue if not durable
             channel.queue_declare(queue='email_notification', durable=True)
 
+        # Publishes the message to the email_notification queue.
         channel.basic_publish(
+            #  Uses the default exchange
             exchange="",
+            # Specifies the queue to which the message should be sent.
             routing_key='email_notification',
+            # Converts the message dictionary to a JSON string.
             body=json.dumps(message),
+            # Marks the message as persistent, so it survives RabbitMQ restarts.
             properties=pika.BasicProperties(
                 delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE
             ),
